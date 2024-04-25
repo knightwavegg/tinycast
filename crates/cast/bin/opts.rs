@@ -1,8 +1,5 @@
 use crate::cmd::{
-    access_list::AccessListArgs, bind::BindArgs, call::CallArgs, create2::Create2Args,
-    estimate::EstimateArgs, find_block::FindBlockArgs, interface::InterfaceArgs, logs::LogsArgs,
-    mktx::MakeTxArgs, rpc::RpcArgs, run::RunArgs, send::SendTxArgs, storage::StorageArgs,
-    wallet::WalletSubcommands,
+    create2::Create2Args, interface::InterfaceArgs, mktx::MakeTxArgs,
 };
 use alloy_primitives::{Address, B256, U256};
 use alloy_rpc_types::BlockId;
@@ -291,45 +288,6 @@ pub enum CastSubcommand {
         #[arg(value_name = "BASE")]
         base_out: Option<String>,
     },
-    /// Create an access list for a transaction.
-    #[command(visible_aliases = &["ac", "acl"])]
-    AccessList(AccessListArgs),
-    /// Get logs by signature or topic.
-    #[command(visible_alias = "l")]
-    Logs(LogsArgs),
-    /// Get information about a block.
-    #[command(visible_alias = "bl")]
-    Block {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        block: Option<BlockId>,
-
-        /// If specified, only get the given field of the block.
-        #[arg(long, short)]
-        field: Option<String>,
-
-        #[arg(long, env = "CAST_FULL_BLOCK")]
-        full: bool,
-
-        /// Print the block as JSON.
-        #[arg(long, short, help_heading = "Display options")]
-        json: bool,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the latest block number.
-    #[command(visible_alias = "bn")]
-    BlockNumber {
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Perform a call on an account without publishing a transaction.
-    #[command(visible_alias = "c")]
-    Call(CallArgs),
 
     /// ABI-encode a function with arguments.
     #[command(name = "calldata", visible_alias = "cd")]
@@ -342,39 +300,6 @@ pub enum CastSubcommand {
         args: Vec<String>,
     },
 
-    /// Get the symbolic name of the current chain.
-    Chain {
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the Ethereum chain ID.
-    #[command(visible_aliases = &["ci", "cid"])]
-    ChainId {
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the current client version.
-    #[command(visible_alias = "cl")]
-    Client {
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Compute the contract address from a given nonce and deployer address.
-    #[command(visible_alias = "ca")]
-    ComputeAddress {
-        /// The deployer address.
-        address: Option<String>,
-
-        /// The nonce of the deployer address.
-        #[arg(long)]
-        nonce: Option<u64>,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
 
     /// Disassembles hex encoded bytecode into individual / human readable opcodes
     #[command(visible_alias = "da")]
@@ -390,75 +315,6 @@ pub enum CastSubcommand {
     /// Calculate the ENS namehash of a name.
     #[command(visible_aliases = &["na", "nh"])]
     Namehash { name: Option<String> },
-
-    /// Get information about a transaction.
-    #[command(visible_alias = "t")]
-    Tx {
-        /// The transaction hash.
-        tx_hash: String,
-
-        /// If specified, only get the given field of the transaction. If "raw", the RLP encoded
-        /// transaction will be printed.
-        field: Option<String>,
-
-        /// Print the raw RLP encoded transaction.
-        #[arg(long, conflicts_with = "field")]
-        raw: bool,
-
-        /// Print as JSON.
-        #[arg(long, short, help_heading = "Display options")]
-        json: bool,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the transaction receipt for a transaction.
-    #[command(visible_alias = "re")]
-    Receipt {
-        /// The transaction hash.
-        tx_hash: String,
-
-        /// If specified, only get the given field of the transaction.
-        field: Option<String>,
-
-        /// The number of confirmations until the receipt is fetched
-        #[arg(long, default_value = "1")]
-        confirmations: u64,
-
-        /// Exit immediately if the transaction was not found.
-        #[arg(id = "async", long = "async", env = "CAST_ASYNC", alias = "cast-async")]
-        cast_async: bool,
-
-        /// Print as JSON.
-        #[arg(long, short, help_heading = "Display options")]
-        json: bool,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Sign and publish a transaction.
-    #[command(name = "send", visible_alias = "s")]
-    SendTx(SendTxArgs),
-
-    /// Publish a raw transaction to the network.
-    #[command(name = "publish", visible_alias = "p")]
-    PublishTx {
-        /// The raw transaction
-        raw_tx: String,
-
-        /// Only print the transaction hash and exit immediately.
-        #[arg(id = "async", long = "async", env = "CAST_ASYNC", alias = "cast-async")]
-        cast_async: bool,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Estimate the gas cost of a transaction.
-    #[command(visible_alias = "e")]
-    Estimate(EstimateArgs),
 
     /// Decode ABI-encoded input data.
     ///
@@ -519,40 +375,6 @@ pub enum CastSubcommand {
         slot_number: String,
     },
 
-    /// Fetch the EIP-1967 implementation account
-    #[command(visible_alias = "impl")]
-    Implementation {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        #[arg(long, short = 'B')]
-        block: Option<BlockId>,
-
-        /// The address to get the nonce for.
-        #[arg(value_parser = NameOrAddress::from_str)]
-        who: NameOrAddress,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Fetch the EIP-1967 admin account
-    #[command(visible_alias = "adm")]
-    Admin {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        #[arg(long, short = 'B')]
-        block: Option<BlockId>,
-
-        /// The address to get the nonce for.
-        #[arg(value_parser = NameOrAddress::from_str)]
-        who: NameOrAddress,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
     /// Get the function signatures for the given selector from https://openchain.xyz.
     #[command(name = "4byte", visible_aliases = &["4", "4b"])]
     FourByte {
@@ -575,22 +397,6 @@ pub enum CastSubcommand {
         topic: Option<String>,
     },
 
-    /// Upload the given signatures to https://openchain.xyz.
-    ///
-    /// Example inputs:
-    /// - "transfer(address,uint256)"
-    /// - "function transfer(address,uint256)"
-    /// - "function transfer(address,uint256)" "event Transfer(address,address,uint256)"
-    /// - "./out/Contract.sol/Contract.json"
-    #[command(visible_aliases = &["ups"])]
-    UploadSignature {
-        /// The signatures to upload.
-        ///
-        /// Prefix with 'function', 'event', or 'error'. Defaults to function if no prefix given.
-        /// Can also take paths to contract artifact JSON.
-        signatures: Vec<String>,
-    },
-
     /// Pretty print calldata.
     ///
     /// Tries to decode the calldata using https://openchain.xyz unless --offline is passed.
@@ -602,101 +408,6 @@ pub enum CastSubcommand {
         /// Skip the https://openchain.xyz lookup.
         #[arg(long, short)]
         offline: bool,
-    },
-
-    /// Get the timestamp of a block.
-    #[command(visible_alias = "a")]
-    Age {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        block: Option<BlockId>,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the balance of an account in wei.
-    #[command(visible_alias = "b")]
-    Balance {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        #[arg(long, short = 'B')]
-        block: Option<BlockId>,
-
-        /// The account to query.
-        #[arg(value_parser = NameOrAddress::from_str)]
-        who: NameOrAddress,
-
-        /// Format the balance in ether.
-        #[arg(long, short)]
-        ether: bool,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-
-        /// erc20 address to query, with the method `balanceOf(address) return (uint256)`, alias
-        /// with '--erc721'
-        #[arg(long, alias = "erc721")]
-        erc20: Option<Address>,
-    },
-
-    /// Get the basefee of a block.
-    #[command(visible_aliases = &["ba", "fee", "basefee"])]
-    BaseFee {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        block: Option<BlockId>,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the runtime bytecode of a contract.
-    #[command(visible_alias = "co")]
-    Code {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        #[arg(long, short = 'B')]
-        block: Option<BlockId>,
-
-        /// The contract address.
-        #[arg(value_parser = NameOrAddress::from_str)]
-        who: NameOrAddress,
-
-        /// Disassemble bytecodes into individual opcodes.
-        #[arg(long, short)]
-        disassemble: bool,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the runtime bytecode size of a contract.
-    #[command(visible_alias = "cs")]
-    Codesize {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        #[arg(long, short = 'B')]
-        block: Option<BlockId>,
-
-        /// The contract address.
-        #[arg(value_parser = NameOrAddress::from_str)]
-        who: NameOrAddress,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the current gas price.
-    #[command(visible_alias = "g")]
-    GasPrice {
-        #[command(flatten)]
-        rpc: RpcOpts,
     },
 
     /// Generate event signatures from event string.
@@ -713,106 +424,11 @@ pub enum CastSubcommand {
         data: Option<String>,
     },
 
-    /// Perform an ENS lookup.
-    #[command(visible_alias = "rn")]
-    ResolveName {
-        /// The name to lookup.
-        who: Option<String>,
-
-        /// Perform a reverse lookup to verify that the name is correct.
-        #[arg(long, short)]
-        verify: bool,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Perform an ENS reverse lookup.
-    #[command(visible_alias = "la")]
-    LookupAddress {
-        /// The account to perform the lookup for.
-        who: Option<Address>,
-
-        /// Perform a normal lookup to verify that the address is correct.
-        #[arg(long, short)]
-        verify: bool,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the raw value of a contract's storage slot.
-    #[command(visible_alias = "st")]
-    Storage(StorageArgs),
-
-    /// Generate a storage proof for a given storage slot.
-    #[command(visible_alias = "pr")]
-    Proof {
-        /// The contract address.
-        #[arg(value_parser = NameOrAddress::from_str)]
-        address: NameOrAddress,
-
-        /// The storage slot numbers (hex or decimal).
-        #[arg(value_parser = parse_slot)]
-        slots: Vec<B256>,
-
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        #[arg(long, short = 'B')]
-        block: Option<BlockId>,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the nonce for an account.
-    #[command(visible_alias = "n")]
-    Nonce {
-        /// The block height to query at.
-        ///
-        /// Can also be the tags earliest, finalized, safe, latest, or pending.
-        #[arg(long, short = 'B')]
-        block: Option<BlockId>,
-
-        /// The address to get the nonce for.
-        #[arg(value_parser = NameOrAddress::from_str)]
-        who: NameOrAddress,
-
-        #[command(flatten)]
-        rpc: RpcOpts,
-    },
-
-    /// Get the source code of a contract from Etherscan.
-    #[command(visible_aliases = &["et", "src"])]
-    EtherscanSource {
-        /// The contract's address.
-        address: String,
-
-        /// The output directory to expand source tree into.
-        #[arg(short, value_hint = ValueHint::DirPath)]
-        directory: Option<PathBuf>,
-
-        #[command(flatten)]
-        etherscan: EtherscanOpts,
-    },
-
-    /// Wallet management utilities.
-    #[command(visible_alias = "w")]
-    Wallet {
-        #[command(subcommand)]
-        command: WalletSubcommands,
-    },
-
     /// Generate a Solidity interface from a given ABI.
     ///
     /// Currently does not support ABI encoder v2.
     #[command(visible_alias = "i")]
     Interface(InterfaceArgs),
-
-    /// Generate a rust binding from a given ABI.
-    #[command(visible_alias = "bi")]
-    Bind(BindArgs),
 
     /// Get the selector for a function.
     #[command(visible_alias = "si")]
@@ -828,10 +444,6 @@ pub enum CastSubcommand {
     #[command(visible_alias = "c2")]
     Create2(Create2Args),
 
-    /// Get the block number closest to the provided timestamp.
-    #[command(visible_alias = "f")]
-    FindBlock(FindBlockArgs),
-
     /// Generate shell completions script.
     #[command(visible_alias = "com")]
     Completions {
@@ -842,14 +454,6 @@ pub enum CastSubcommand {
     /// Generate Fig autocompletion spec.
     #[command(visible_alias = "fig")]
     GenerateFigSpec,
-
-    /// Runs a published transaction in a local environment and prints the trace.
-    #[command(visible_alias = "r")]
-    Run(RunArgs),
-
-    /// Perform a raw JSON-RPC request.
-    #[command(visible_alias = "rp")]
-    Rpc(RpcArgs),
 
     /// Formats a string into bytes32 encoding.
     #[command(name = "format-bytes32-string", visible_aliases = &["--format-bytes32-string"])]
@@ -916,34 +520,6 @@ mod tests {
         Cast::command().debug_assert();
     }
 
-    #[test]
-    fn parse_proof_slot() {
-        let args: Cast = Cast::parse_from([
-            "foundry-cli",
-            "proof",
-            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-            "0",
-            "1",
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            "0x1",
-            "0x01",
-        ]);
-        match args.cmd {
-            CastSubcommand::Proof { slots, .. } => {
-                assert_eq!(
-                    slots,
-                    vec![
-                        B256::ZERO,
-                        U256::from(1).into(),
-                        B256::ZERO,
-                        U256::from(1).into(),
-                        U256::from(1).into()
-                    ]
-                );
-            }
-            _ => unreachable!(),
-        };
-    }
 
     #[test]
     fn parse_call_data() {
