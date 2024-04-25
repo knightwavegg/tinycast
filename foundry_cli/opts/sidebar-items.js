@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["dependency","transaction"],"static":["GH_REPO_PREFIX_REGEX"],"struct":["Dependency","TransactionOpts"]};

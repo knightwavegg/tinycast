@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["cli_warn"],"static":["SPINNERS","TERM_SETTINGS"],"struct":["Spinner","TermSettings"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bytecode_diff_score","count_different_bytes","get_contract_name","get_file_name"],"struct":["ContractData"],"type":["ContractsByAddress"]};

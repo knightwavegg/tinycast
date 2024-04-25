@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FormatSpec"],"fn":["console_format","format_int_exp","format_token","format_token_raw","format_tokens","format_uint_exp","parse_tokens"],"mod":["console","dynamic","ui"],"trait":["ConsoleFmt","UIfmt"]};

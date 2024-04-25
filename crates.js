@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["cast","foundry_cli","foundry_common"];
