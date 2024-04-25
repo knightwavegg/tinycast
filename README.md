@@ -1,14 +1,6 @@
-<img src=".github/logo.png" alt="Foundry logo" align="right" width="120" />
+# This is a barebones fork of [ Foundry ]( https://github.com/foundry-rs ) that strips out everything but the core `cast` utility commands.
 
 ## Foundry
-
-![Github Actions][gha-badge] [![Telegram Chat][tg-badge]][tg-url] [![Telegram Support][tg-support-badge]][tg-support-url]
-
-[gha-badge]: https://img.shields.io/github/actions/workflow/status/foundry-rs/foundry/test.yml?branch=master
-[tg-badge]: https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Ffoundry_rs
-[tg-url]: https://t.me/foundry_rs
-[tg-support-badge]: https://img.shields.io/endpoint?color=neon&logo=telegram&label=support&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Ffoundry_support
-[tg-support-url]: https://t.me/foundry_support
 
 **[Install](https://book.getfoundry.sh/getting-started/installation)**
 | [User Book](https://book.getfoundry.sh)
