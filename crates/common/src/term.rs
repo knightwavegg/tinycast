@@ -1,18 +1,8 @@
 //! terminal utils
-use foundry_compilers::{
-    remappings::Remapping,
-    report::{self, BasicStdoutReporter, Reporter, SolcCompilerIoReporter},
-    CompilerInput, CompilerOutput, Solc,
-};
 use once_cell::sync::Lazy;
-use semver::Version;
 use std::{
     io,
     io::{prelude::*, IsTerminal},
-    path::{Path, PathBuf},
-    sync::mpsc::{self, TryRecvError},
-    thread,
-    time::Duration,
 };
 use yansi::Paint;
 
@@ -82,138 +72,6 @@ impl Spinner {
     }
 }
 
-/// A spinner used as [`report::Reporter`]
-///
-/// This reporter will prefix messages with a spinning cursor
-#[derive(Debug)]
-#[must_use = "Terminates the spinner on drop"]
-pub struct SpinnerReporter {
-    /// The sender to the spinner thread.
-    sender: mpsc::Sender<SpinnerMsg>,
-    /// Reporter that logs Solc compiler input and output to separate files if configured via env
-    /// var.
-    solc_io_report: SolcCompilerIoReporter,
-}
-
-impl SpinnerReporter {
-    /// Spawns the [`Spinner`] on a new thread
-    ///
-    /// The spinner's message will be updated via the `reporter` events
-    ///
-    /// On drop the channel will disconnect and the thread will terminate
-    pub fn spawn() -> Self {
-        let (sender, rx) = mpsc::channel::<SpinnerMsg>();
-
-        std::thread::Builder::new()
-            .name("spinner".into())
-            .spawn(move || {
-                let mut spinner = Spinner::new("Compiling...");
-                loop {
-                    spinner.tick();
-                    match rx.try_recv() {
-                        Ok(SpinnerMsg::Msg(msg)) => {
-                            spinner.message(msg);
-                            // new line so past messages are not overwritten
-                            println!();
-                        }
-                        Ok(SpinnerMsg::Shutdown(ack)) => {
-                            // end with a newline
-                            println!();
-                            let _ = ack.send(());
-                            break
-                        }
-                        Err(TryRecvError::Disconnected) => break,
-                        Err(TryRecvError::Empty) => thread::sleep(Duration::from_millis(100)),
-                    }
-                }
-            })
-            .expect("failed to spawn thread");
-
-        SpinnerReporter { sender, solc_io_report: SolcCompilerIoReporter::from_default_env() }
-    }
-
-    fn send_msg(&self, msg: impl Into<String>) {
-        let _ = self.sender.send(SpinnerMsg::Msg(msg.into()));
-    }
-}
-
-enum SpinnerMsg {
-    Msg(String),
-    Shutdown(mpsc::Sender<()>),
-}
-
-impl Drop for SpinnerReporter {
-    fn drop(&mut self) {
-        let (tx, rx) = mpsc::channel();
-        if self.sender.send(SpinnerMsg::Shutdown(tx)).is_ok() {
-            let _ = rx.recv();
-        }
-    }
-}
-
-impl Reporter for SpinnerReporter {
-    fn on_solc_spawn(
-        &self,
-        _solc: &Solc,
-        version: &Version,
-        input: &CompilerInput,
-        dirty_files: &[PathBuf],
-    ) {
-        self.send_msg(format!(
-            "Compiling {} files with {}.{}.{}",
-            dirty_files.len(),
-            version.major,
-            version.minor,
-            version.patch
-        ));
-        self.solc_io_report.log_compiler_input(input, version);
-    }
-
-    fn on_solc_success(
-        &self,
-        _solc: &Solc,
-        version: &Version,
-        output: &CompilerOutput,
-        duration: &Duration,
-    ) {
-        self.solc_io_report.log_compiler_output(output, version);
-        self.send_msg(format!(
-            "Solc {}.{}.{} finished in {duration:.2?}",
-            version.major, version.minor, version.patch
-        ));
-    }
-
-    /// Invoked before a new [`Solc`] bin is installed
-    fn on_solc_installation_start(&self, version: &Version) {
-        self.send_msg(format!("Installing Solc version {version}"));
-    }
-
-    /// Invoked before a new [`Solc`] bin was successfully installed
-    fn on_solc_installation_success(&self, version: &Version) {
-        self.send_msg(format!("Successfully installed Solc {version}"));
-    }
-
-    fn on_solc_installation_error(&self, version: &Version, error: &str) {
-        self.send_msg(Paint::red(format!("Failed to install Solc {version}: {error}")).to_string());
-    }
-
-    fn on_unresolved_imports(&self, imports: &[(&Path, &Path)], remappings: &[Remapping]) {
-        self.send_msg(report::format_unresolved_imports(imports, remappings));
-    }
-}
-
-/// If the output medium is terminal, this calls `f` within the [`SpinnerReporter`] that displays a
-/// spinning cursor to display solc progress.
-///
-/// If no terminal is available this falls back to common `println!` in [`BasicStdoutReporter`].
-pub fn with_spinner_reporter<T>(f: impl FnOnce() -> T) -> T {
-    let reporter = if TERM_SETTINGS.indicate_progress {
-        report::Report::new(SpinnerReporter::spawn())
-    } else {
-        report::Report::new(BasicStdoutReporter::default())
-    };
-    report::with_scoped(&reporter, f)
-}
 
 #[macro_export]
 /// Displays warnings on the cli
@@ -245,24 +103,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn can_format_properly() {
-        let r = SpinnerReporter::spawn();
-        let remappings: Vec<Remapping> = vec![
-            "library/=library/src/".parse().unwrap(),
-            "weird-erc20/=lib/weird-erc20/src/".parse().unwrap(),
-            "ds-test/=lib/ds-test/src/".parse().unwrap(),
-            "openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/".parse().unwrap(),
-        ];
-        let unresolved = vec![(Path::new("./src/Import.sol"), Path::new("src/File.col"))];
-        r.on_unresolved_imports(&unresolved, &remappings);
-        // formats:
-        // [⠒] Unable to resolve imports:
-        //       "./src/Import.sol" in "src/File.col"
-        // with remappings:
-        //       library/=library/src/
-        //       weird-erc20/=lib/weird-erc20/src/
-        //       ds-test/=lib/ds-test/src/
-        //       openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/
-    }
 }

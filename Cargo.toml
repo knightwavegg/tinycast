@@ -1,27 +1,9 @@
 [workspace]
 members = [
-    "crates/anvil/",
-    "crates/anvil/core/",
-    "crates/anvil/rpc/",
-    "crates/anvil/server/",
     "crates/cast/",
-    "crates/cheatcodes/",
-    "crates/cheatcodes/spec/",
-    "crates/chisel/",
     "crates/cli/",
     "crates/common/",
-    "crates/config/",
-    "crates/debugger/",
-    "crates/doc/",
-    "crates/evm/core/",
-    "crates/evm/coverage/",
-    "crates/evm/evm/",
-    "crates/evm/fuzz/",
-    "crates/evm/traces/",
-    "crates/fmt/",
-    "crates/forge/",
     "crates/macros/",
-    "crates/test-utils/",
 ]
 resolver = "2"
 
@@ -45,7 +27,6 @@ debug = 1
 # Speed up tests and dev build.
 [profile.dev.package]
 # Solc and artifacts
-foundry-compilers.opt-level = 3
 solang-parser.opt-level = 3
 lalrpop-util.opt-level = 3
 serde_json.opt-level = 3
@@ -111,34 +92,11 @@ toml_edit.opt-level = 1
 trezor-client.opt-level = 1
 
 [workspace.dependencies]
-anvil = { path = "crates/anvil" }
 cast = { path = "crates/cast" }
-chisel = { path = "crates/chisel" }
-forge = { path = "crates/forge" }
-
-forge-doc = { path = "crates/doc" }
-forge-fmt = { path = "crates/fmt" }
-forge-verify = { path = "crates/verify" }
 forge-script = { path = "crates/script" }
-foundry-cheatcodes = { path = "crates/cheatcodes" }
-foundry-cheatcodes-spec = { path = "crates/cheatcodes/spec" }
 foundry-cli = { path = "crates/cli" }
 foundry-common = { path = "crates/common" }
-foundry-config = { path = "crates/config" }
-foundry-debugger = { path = "crates/debugger" }
-foundry-evm = { path = "crates/evm/evm" }
-foundry-evm-core = { path = "crates/evm/core" }
-foundry-evm-coverage = { path = "crates/evm/coverage" }
-foundry-evm-fuzz = { path = "crates/evm/fuzz" }
-foundry-evm-traces = { path = "crates/evm/traces" }
 foundry-macros = { path = "crates/macros" }
-foundry-test-utils = { path = "crates/test-utils" }
-foundry-wallets = { path = "crates/wallets" }
-foundry-linking = { path = "crates/linking" }
-
-# solc & compilation utilities
-foundry-block-explorers = { version = "0.2.6", default-features = false }
-foundry-compilers = { version = "0.3.14", default-features = false }
 
 ## revm
 # no default features to avoid c-kzg
@@ -158,7 +116,6 @@ ethers-signers = { version = "2.0.14", default-features = false }
 ethers-middleware = { version = "2.0.14", default-features = false }
 
 ## alloy
-alloy-consensus = { git = "https://github.com/alloy-rs/alloy", rev = "7629f79", default-features = false }
 alloy-contract = { git = "https://github.com/alloy-rs/alloy", rev = "7629f79", default-features = false }
 alloy-eips = { git = "https://github.com/alloy-rs/alloy", rev = "7629f79", default-features = false }
 alloy-genesis = { git = "https://github.com/alloy-rs/alloy", rev = "7629f79", default-features = false }

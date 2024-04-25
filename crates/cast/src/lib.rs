@@ -1,39 +1,21 @@
-use alloy_consensus::TxEnvelope;
-use alloy_dyn_abi::{DynSolType, DynSolValue, FunctionExt};
-use alloy_json_abi::{ContractObject, Function};
-use alloy_network::AnyNetwork;
+use alloy_dyn_abi::{DynSolType, DynSolValue};
 use alloy_primitives::{
     utils::{keccak256, ParseUnits, Unit},
-    Address, Keccak256, TxHash, B256, I256, U256,
+    Address, Keccak256, B256, I256, U256,
 };
 use alloy_rlp::Decodable;
-use alloy_rpc_types::{BlockId, BlockNumberOrTag, Filter, TransactionRequest, WithOtherFields};
 use alloy_sol_types::sol;
-use alloy_transport::Transport;
 use base::{Base, NumberWithBase, ToBase};
-use chrono::DateTime;
-use evm_disassembler::{disassemble_bytes, disassemble_str, format_operations};
+use evm_disassembler::{disassemble_str, format_operations};
 use eyre::{Context, ContextCompat, Result};
-use foundry_common::{
-    abi::{encode_function_args, get_func},
-    fmt::*,
-    TransactionReceiptWithRevertReason,
-};
-use foundry_config::Chain;
-use futures::{future::Either, FutureExt, StreamExt};
+use foundry_common::abi::{encode_function_args, get_func};
 use rayon::prelude::*;
 use std::{
-    borrow::Cow,
-    io,
-    marker::PhantomData,
-    path::PathBuf,
     str::FromStr,
     sync::atomic::{AtomicBool, Ordering},
 };
-use tokio::signal::ctrl_c;
 
 use foundry_common::abi::encode_function_args_packed;
-pub use foundry_evm::*;
 
 pub mod base;
 pub mod errors;
@@ -49,11 +31,6 @@ sol! {
         #[derive(Debug)]
         function balanceOf(address owner) external view returns (uint256);
     }
-}
-
-pub struct Cast<P, T> {
-    provider: P,
-    transport: PhantomData<T>,
 }
 
 pub struct InterfaceSource {
@@ -700,49 +677,6 @@ impl SimpleCast {
         Ok(hex::encode_prefixed(calldata))
     }
 
-    /// Generates an interface in solidity from either a local file ABI or a verified contract on
-    /// Etherscan. It returns a vector of [`InterfaceSource`] structs that contain the source of the
-    /// interface and their name.
-    ///
-    /// Note: This removes the constructor from the ABI before generating the interface.
-    ///
-    /// ```no_run
-    /// use cast::{AbiPath, SimpleCast as Cast};
-    /// # async fn foo() -> eyre::Result<()> {
-    /// let path =
-    ///     AbiPath::Local { path: "utils/testdata/interfaceTestABI.json".to_owned(), name: None };
-    /// let interfaces = Cast::generate_interface(path).await?;
-    /// println!("interface {} {{\n {}\n}}", interfaces[0].name, interfaces[0].source);
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn generate_interface(address_or_path: AbiPath) -> Result<Vec<InterfaceSource>> {
-        let (mut contract_abis, contract_names) = match address_or_path {
-            AbiPath::Local { path, name } => {
-                let file = std::fs::read_to_string(&path).wrap_err("unable to read abi file")?;
-                let obj: ContractObject = serde_json::from_str(&file)?;
-                let abi =
-                    obj.abi.ok_or_else(|| eyre::eyre!("could not find ABI in file {path}"))?;
-                (vec![abi], vec![name.unwrap_or_else(|| "Interface".to_owned())])
-            }
-        };
-        contract_abis
-            .iter_mut()
-            .zip(contract_names)
-            .map(|(contract_abi, name)| {
-                // need to filter out the constructor
-                contract_abi.constructor.take();
-
-                let source = foundry_cli::utils::abi_to_solidity(contract_abi, &name)?;
-                Ok(InterfaceSource {
-                    name,
-                    json_abi: serde_json::to_string_pretty(contract_abi)?,
-                    source,
-                })
-            })
-            .collect::<Result<Vec<InterfaceSource>>>()
-    }
-
     /// Prints the slot number for the specified mapping type and input data.
     ///
     /// For value types `v`, slot number of `v` is `keccak256(concat(h(v), p))` where `h` is the
@@ -942,73 +876,6 @@ impl SimpleCast {
         Ok(res.to_base(base_out, true)?)
     }
 
-    /// Fetches source code of verified contracts from etherscan.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use cast::SimpleCast as Cast;
-    /// # use foundry_config::NamedChain;
-    /// # async fn foo() -> eyre::Result<()> {
-    /// assert_eq!(
-    ///     "/*
-    ///             - Bytecode Verification performed was compared on second iteration -
-    ///             This file is part of the DAO.....",
-    ///     Cast::etherscan_source(
-    ///         NamedChain::Mainnet.into(),
-    ///         "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413".to_string(),
-    ///         "<etherscan_api_key>".to_string()
-    ///     )
-    ///     .await
-    ///     .unwrap()
-    ///     .as_str()
-    /// );
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn etherscan_source(
-        chain: Chain,
-        contract_address: String,
-        etherscan_api_key: String,
-    ) -> Result<String> {
-        let client = Client::new(chain, etherscan_api_key)?;
-        let metadata = client.contract_source_code(contract_address.parse()?).await?;
-        Ok(metadata.source_code())
-    }
-
-    /// Fetches the source code of verified contracts from etherscan and expands the resulting
-    /// files to a directory for easy perusal.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use cast::SimpleCast as Cast;
-    /// # use foundry_config::NamedChain;
-    /// # use std::path::PathBuf;
-    /// # async fn expand() -> eyre::Result<()> {
-    /// Cast::expand_etherscan_source_to_directory(
-    ///     NamedChain::Mainnet.into(),
-    ///     "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413".to_string(),
-    ///     "<etherscan_api_key>".to_string(),
-    ///     PathBuf::from("output_dir"),
-    /// )
-    /// .await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn expand_etherscan_source_to_directory(
-        chain: Chain,
-        contract_address: String,
-        etherscan_api_key: String,
-        output_directory: PathBuf,
-    ) -> eyre::Result<()> {
-        let client = Client::new(chain, etherscan_api_key)?;
-        let meta = client.contract_source_code(contract_address.parse()?).await?;
-        let source_tree = meta.source_tree();
-        source_tree.write_to(&output_directory)?;
-        Ok(())
-    }
-
     /// Disassembles hex encoded bytecode into individual / human readable opcodes
     ///
     /// # Example
@@ -1101,22 +968,6 @@ impl SimpleCast {
             .collect())
     }
 
-    /// Decodes a raw EIP2718 transaction payload
-    /// Returns details about the typed transaction and ECSDA signature components
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use cast::SimpleCast as Cast;
-    ///
-    /// let tx = "0x02f8f582a86a82058d8459682f008508351050808303fd84948e42f2f4101563bf679975178e880fd87d3efd4e80b884659ac74b00000000000000000000000080f0c1c49891dcfdd40b6e0f960f84e6042bcb6f000000000000000000000000b97ef9ef8734c71904d8002f8b6bc66dd9c48a6e00000000000000000000000000000000000000000000000000000000007ff4e20000000000000000000000000000000000000000000000000000000000000064c001a05d429597befe2835396206781b199122f2e8297327ed4a05483339e7a8b2022aa04c23a7f70fb29dda1b4ee342fb10a625e9b8ddc6a603fb4e170d4f6f37700cb8";
-    /// let tx_envelope = Cast::decode_raw_transaction(&tx)?;
-    /// # Ok::<(), eyre::Report>(())
-    pub fn decode_raw_transaction(tx: &str) -> Result<TxEnvelope> {
-        let tx_hex = hex::decode(strip_0x(tx))?;
-        let tx = TxEnvelope::decode_2718(&mut tx_hex.as_slice())?;
-        Ok(tx)
-    }
 }
 
 fn strip_0x(s: &str) -> &str {

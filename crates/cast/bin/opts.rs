@@ -1,13 +1,8 @@
-use crate::cmd::{
-    create2::Create2Args, interface::InterfaceArgs, mktx::MakeTxArgs,
-};
+use crate::cmd::create2::Create2Args;
 use alloy_primitives::{Address, B256, U256};
-use alloy_rpc_types::BlockId;
-use clap::{Parser, Subcommand, ValueHint};
+use clap::{Parser, Subcommand};
 use eyre::Result;
-use foundry_cli::opts::{EtherscanOpts, RpcOpts};
-use foundry_common::ens::NameOrAddress;
-use std::{path::PathBuf, str::FromStr};
+use std::str::FromStr;
 
 const VERSION_MESSAGE: &str = concat!(
     env!("CARGO_PKG_VERSION"),
@@ -308,10 +303,6 @@ pub enum CastSubcommand {
         bytecode: String,
     },
 
-    /// Build and sign a transaction.
-    #[command(name = "mktx", visible_alias = "m")]
-    MakeTx(MakeTxArgs),
-
     /// Calculate the ENS namehash of a name.
     #[command(visible_aliases = &["na", "nh"])]
     Namehash { name: Option<String> },
@@ -424,12 +415,6 @@ pub enum CastSubcommand {
         data: Option<String>,
     },
 
-    /// Generate a Solidity interface from a given ABI.
-    ///
-    /// Currently does not support ABI encoder v2.
-    #[command(visible_alias = "i")]
-    Interface(InterfaceArgs),
-
     /// Get the selector for a function.
     #[command(visible_alias = "si")]
     Sig {
@@ -443,17 +428,6 @@ pub enum CastSubcommand {
     /// Generate a deterministic contract address using CREATE2.
     #[command(visible_alias = "c2")]
     Create2(Create2Args),
-
-    /// Generate shell completions script.
-    #[command(visible_alias = "com")]
-    Completions {
-        #[arg(value_enum)]
-        shell: clap_complete::Shell,
-    },
-
-    /// Generate Fig autocompletion spec.
-    #[command(visible_alias = "fig")]
-    GenerateFigSpec,
 
     /// Formats a string into bytes32 encoding.
     #[command(name = "format-bytes32-string", visible_aliases = &["--format-bytes32-string"])]
@@ -474,10 +448,6 @@ pub enum CastSubcommand {
         #[arg(value_name = "BYTES")]
         bytes: Option<String>,
     },
-
-    /// Decodes a raw signed EIP 2718 typed transaction
-    #[command(visible_alias = "dt")]
-    DecodeTransaction { tx: Option<String> },
 
     /// Extracts function selectors and arguments from bytecode
     #[command(visible_alias = "sel")]
@@ -506,108 +476,4 @@ pub struct ToBaseArgs {
 pub fn parse_slot(s: &str) -> Result<B256> {
     let slot = U256::from_str(s).map_err(|e| eyre::eyre!("Could not parse slot number: {e}"))?;
     Ok(B256::from(slot))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use alloy_rpc_types::{BlockNumberOrTag, RpcBlockHash};
-    use cast::SimpleCast;
-    use clap::CommandFactory;
-
-    #[test]
-    fn verify_cli() {
-        Cast::command().debug_assert();
-    }
-
-
-    #[test]
-    fn parse_call_data() {
-        let args: Cast = Cast::parse_from([
-            "foundry-cli",
-            "calldata",
-            "f()",
-            "5c9d55b78febcc2061715ba4f57ecf8ea2711f2c",
-            "2",
-        ]);
-        match args.cmd {
-            CastSubcommand::CalldataEncode { args, .. } => {
-                assert_eq!(
-                    args,
-                    vec!["5c9d55b78febcc2061715ba4f57ecf8ea2711f2c".to_string(), "2".to_string()]
-                )
-            }
-            _ => unreachable!(),
-        };
-    }
-
-    // <https://github.com/foundry-rs/book/issues/1019>
-    #[test]
-    fn parse_signature() {
-        let args: Cast = Cast::parse_from([
-            "foundry-cli",
-            "sig",
-            "__$_$__$$$$$__$$_$$$_$$__$$___$$(address,address,uint256)",
-        ]);
-        match args.cmd {
-            CastSubcommand::Sig { sig, .. } => {
-                let sig = sig.unwrap();
-                assert_eq!(
-                    sig,
-                    "__$_$__$$$$$__$$_$$$_$$__$$___$$(address,address,uint256)".to_string()
-                );
-
-                let selector = SimpleCast::get_selector(&sig, 0).unwrap();
-                assert_eq!(selector.0, "0x23b872dd".to_string());
-            }
-            _ => unreachable!(),
-        };
-    }
-
-    #[test]
-    fn parse_block_ids() {
-        struct TestCase {
-            input: String,
-            expect: BlockId,
-        }
-
-        let test_cases = [
-            TestCase {
-                input: "0".to_string(),
-                expect: BlockId::Number(BlockNumberOrTag::Number(0u64)),
-            },
-            TestCase {
-                input: "0x56462c47c03df160f66819f0a79ea07def1569f8aac0fe91bb3a081159b61b4a"
-                    .to_string(),
-                expect: BlockId::Hash(RpcBlockHash::from_hash(
-                    "0x56462c47c03df160f66819f0a79ea07def1569f8aac0fe91bb3a081159b61b4a"
-                        .parse()
-                        .unwrap(),
-                    None,
-                )),
-            },
-            TestCase {
-                input: "latest".to_string(),
-                expect: BlockId::Number(BlockNumberOrTag::Latest),
-            },
-            TestCase {
-                input: "earliest".to_string(),
-                expect: BlockId::Number(BlockNumberOrTag::Earliest),
-            },
-            TestCase {
-                input: "pending".to_string(),
-                expect: BlockId::Number(BlockNumberOrTag::Pending),
-            },
-            TestCase { input: "safe".to_string(), expect: BlockId::Number(BlockNumberOrTag::Safe) },
-            TestCase {
-                input: "finalized".to_string(),
-                expect: BlockId::Number(BlockNumberOrTag::Finalized),
-            },
-        ];
-
-        for test in test_cases {
-            let result: BlockId = test.input.parse().unwrap();
-            assert_eq!(result, test.expect);
-        }
-    }
 }

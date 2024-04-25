@@ -2,11 +2,8 @@
 
 use alloy_dyn_abi::{DynSolType, DynSolValue, FunctionExt, JsonAbiExt};
 use alloy_json_abi::{Event, Function};
-use alloy_primitives::{hex, Address, LogData};
-use eyre::{Context, ContextCompat, Result};
-use foundry_block_explorers::{contract::ContractMetadata, errors::EtherscanError, Client};
-use foundry_config::Chain;
-use std::{future::Future, pin::Pin};
+use alloy_primitives::{hex, LogData};
+use eyre::{Context, Result};
 
 /// Given a function and a vector of string arguments, it proceeds to convert the args to alloy
 /// [DynSolValue]s and then ABI encode them.
@@ -100,63 +97,6 @@ pub fn get_indexed_event(mut event: Event, raw_log: &LogData) -> Event {
     event
 }
 
-/// Given a function name, address, and args, tries to parse it as a `Function` by fetching the
-/// abi from etherscan. If the address is a proxy, fetches the ABI of the implementation contract.
-pub async fn get_func_etherscan(
-    function_name: &str,
-    contract: Address,
-    args: &[String],
-    chain: Chain,
-    etherscan_api_key: &str,
-) -> Result<Function> {
-    let client = Client::new(chain, etherscan_api_key)?;
-    let source = find_source(client, contract).await?;
-    let metadata = source.items.first().wrap_err("etherscan returned empty metadata")?;
-
-    let mut abi = metadata.abi()?;
-    let funcs = abi.functions.remove(function_name).unwrap_or_default();
-
-    for func in funcs {
-        let res = encode_function_args(&func, args);
-        if res.is_ok() {
-            return Ok(func)
-        }
-    }
-
-    Err(eyre::eyre!("Function not found in abi"))
-}
-
-/// If the code at `address` is a proxy, recurse until we find the implementation.
-pub fn find_source(
-    client: Client,
-    address: Address,
-) -> Pin<Box<dyn Future<Output = Result<ContractMetadata>>>> {
-    Box::pin(async move {
-        trace!(%address, "find Etherscan source");
-        let source = client.contract_source_code(address).await?;
-        let metadata = source.items.first().wrap_err("Etherscan returned no data")?;
-        if metadata.proxy == 0 {
-            Ok(source)
-        } else {
-            let implementation = metadata.implementation.unwrap();
-            println!(
-                "Contract at {address} is a proxy, trying to fetch source at {implementation}..."
-            );
-            match find_source(client, implementation).await {
-                impl_source @ Ok(_) => impl_source,
-                Err(e) => {
-                    let err = EtherscanError::ContractCodeNotVerified(address).to_string();
-                    if e.to_string() == err {
-                        error!(%err);
-                        Ok(source)
-                    } else {
-                        Err(e)
-                    }
-                }
-            }
-        }
-    })
-}
 
 /// Helper function to coerce a value to a [DynSolValue] given a type string
 pub fn coerce_value(ty: &str, arg: &str) -> Result<DynSolValue> {
@@ -189,51 +129,5 @@ mod tests {
         assert_eq!(func.inputs[0].ty, "bytes4");
         assert_eq!(func.inputs[1].ty, "uint8");
         assert_eq!(func.outputs[0].ty, "bytes4");
-    }
-
-    #[test]
-    fn test_indexed_only_address() {
-        let event = get_event("event Ev(address,uint256,address)").unwrap();
-
-        let param0 = B256::random();
-        let param1 = vec![3; 32];
-        let param2 = B256::random();
-        let log =
-            LogData::new_unchecked(vec![event.selector(), param0, param2], param1.clone().into());
-        let event = get_indexed_event(event, &log);
-
-        assert_eq!(event.inputs.len(), 3);
-
-        // Only the address fields get indexed since total_params > num_indexed_params
-        let parsed = event.decode_log(&log, false).unwrap();
-
-        assert_eq!(event.inputs.iter().filter(|param| param.indexed).count(), 2);
-        assert_eq!(parsed.indexed[0], DynSolValue::Address(Address::from_word(param0)));
-        assert_eq!(parsed.body[0], DynSolValue::Uint(U256::from_be_bytes([3; 32]), 256));
-        assert_eq!(parsed.indexed[1], DynSolValue::Address(Address::from_word(param2)));
-    }
-
-    #[test]
-    fn test_indexed_all() {
-        let event = get_event("event Ev(address,uint256,address)").unwrap();
-
-        let param0 = B256::random();
-        let param1 = vec![3; 32];
-        let param2 = B256::random();
-        let log = LogData::new_unchecked(
-            vec![event.selector(), param0, B256::from_slice(&param1), param2],
-            vec![].into(),
-        );
-        let event = get_indexed_event(event, &log);
-
-        assert_eq!(event.inputs.len(), 3);
-
-        // All parameters get indexed since num_indexed_params == total_params
-        assert_eq!(event.inputs.iter().filter(|param| param.indexed).count(), 3);
-        let parsed = event.decode_log(&log, false).unwrap();
-
-        assert_eq!(parsed.indexed[0], DynSolValue::Address(Address::from_word(param0)));
-        assert_eq!(parsed.indexed[1], DynSolValue::Uint(U256::from_be_bytes([3; 32]), 256));
-        assert_eq!(parsed.indexed[2], DynSolValue::Address(Address::from_word(param2)));
     }
 }

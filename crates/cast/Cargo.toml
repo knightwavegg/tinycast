@@ -23,12 +23,7 @@ vergen = { workspace = true, default-features = false, features = [
 
 [dependencies]
 # lib
-foundry-block-explorers.workspace = true
 foundry-common.workspace = true
-foundry-compilers.workspace = true
-foundry-config.workspace = true
-foundry-evm.workspace = true
-foundry-wallets.workspace = true
 
 alloy-dyn-abi.workspace = true
 alloy-json-abi.workspace = true
@@ -41,7 +36,6 @@ alloy-json-rpc.workspace = true
 alloy-signer.workspace = true
 alloy-signer-wallet = { workspace = true, features = ["mnemonic", "keystore"] }
 alloy-contract.workspace = true
-alloy-consensus = { workspace = true, features = ["serde"] }
 alloy-network.workspace = true
 alloy-sol-types.workspace = true
 alloy-chains.workspace = true
@@ -76,7 +70,7 @@ regex = { version = "1", default-features = false }
 rpassword = "7"
 semver = "1"
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "signal"] }
+tokio = { version = "1", features = ["macros", "signal", "rt-multi-thread"] }
 tracing.workspace = true
 yansi = "0.5"
 evmole = "0.3.1"
@@ -85,14 +79,10 @@ evmole = "0.3.1"
 tikv-jemallocator = { workspace = true, optional = true }
 
 [dev-dependencies]
-foundry-test-utils.workspace = true
 async-trait = "0.1"
 criterion = "0.5"
 
 [features]
-default = ["rustls"]
-rustls = ["foundry-cli/rustls", "foundry-wallets/rustls"]
-openssl = ["foundry-cli/openssl"]
 asm-keccak = ["alloy-primitives/asm-keccak"]
 jemalloc = ["dep:tikv-jemallocator"]
 

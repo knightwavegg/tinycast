@@ -2,30 +2,24 @@
 extern crate tracing;
 
 use alloy_primitives::{keccak256, Address, B256};
-use alloy_provider::Provider;
-use alloy_rpc_types::{BlockId, BlockNumberOrTag::Latest};
-use cast::{Cast, SimpleCast};
-use clap::{CommandFactory, Parser};
-use clap_complete::generate;
+use cast::SimpleCast;
+use clap::Parser;
 use eyre::Result;
 use foundry_cli::{handler, prompt, stdin, utils};
 use foundry_common::{
     abi::get_event,
-    ens::ProviderEnsExt,
-    fmt::{format_tokens, format_uint_exp},
     fs,
+    fmt::*,
     selectors::{
         decode_calldata, decode_event_topic, decode_function_selector, decode_selectors,
-        import_selectors, parse_signatures, pretty_calldata, ParsedSignatures, SelectorImportData,
+        pretty_calldata,
         SelectorType,
     },
 };
-use foundry_config::Config;
 use std::time::Instant;
 
 pub mod cmd;
 pub mod opts;
-pub mod tx;
 
 use opts::{Cast as Opts, CastSubcommand, ToBaseArgs};
 
@@ -36,8 +30,6 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[tokio::main]
 async fn main() -> Result<()> {
     handler::install();
-    utils::load_dotenv();
-    utils::subscriber();
     utils::enable_paint();
 
     let opts = Opts::parse();
@@ -179,7 +171,6 @@ async fn main() -> Result<()> {
         CastSubcommand::CalldataEncode { sig, args } => {
             println!("{}", SimpleCast::calldata_encode(sig, &args)?);
         }
-        CastSubcommand::Interface(cmd) => cmd.run().await?,
         CastSubcommand::PrettyCalldata { calldata, offline } => {
             let calldata = stdin::unwrap_line(calldata)?;
             println!("{}", pretty_calldata(&calldata, offline).await?);
@@ -229,7 +220,6 @@ async fn main() -> Result<()> {
         CastSubcommand::Index { key_type, key, slot_number } => {
             println!("{}", SimpleCast::index(&key_type, &key, &slot_number)?);
         }
-        CastSubcommand::MakeTx(cmd) => cmd.run().await?,
         // 4Byte
         CastSubcommand::FourByte { selector } => {
             let selector = stdin::unwrap_line(selector)?;
@@ -308,21 +298,6 @@ async fn main() -> Result<()> {
         }
         CastSubcommand::Create2(cmd) => {
             cmd.run()?;
-        }
-        CastSubcommand::Completions { shell } => {
-            generate(shell, &mut Opts::command(), "cast", &mut std::io::stdout())
-        }
-        CastSubcommand::GenerateFigSpec => clap_complete::generate(
-            clap_complete_fig::Fig,
-            &mut Opts::command(),
-            "cast",
-            &mut std::io::stdout(),
-        ),
-        CastSubcommand::DecodeTransaction { tx } => {
-            let tx = stdin::unwrap_line(tx)?;
-            let tx = SimpleCast::decode_raw_transaction(&tx)?;
-
-            println!("{}", serde_json::to_string_pretty(&tx)?);
         }
     };
     Ok(())

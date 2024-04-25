@@ -1,18 +1,11 @@
-use alloy_json_abi::JsonAbi;
 use alloy_primitives::U256;
-use alloy_provider::{network::AnyNetwork, Provider};
-use alloy_transport::Transport;
 use eyre::{ContextCompat, Result};
-use foundry_config::{Chain, Config};
 use std::{
     ffi::OsStr,
-    future::Future,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tracing_error::ErrorLayer;
-use tracing_subscriber::prelude::*;
 use yansi::Paint;
 
 mod cmd;
@@ -21,12 +14,6 @@ pub use cmd::*;
 mod suggestions;
 pub use suggestions::*;
 
-mod abi;
-pub use abi::*;
-
-// reexport all `foundry_config::utils`
-#[doc(hidden)]
-pub use foundry_config::utils::*;
 
 /// Deterministic fuzzer seed used for gas snapshots and coverage reports.
 ///
@@ -66,60 +53,6 @@ impl<T: AsRef<Path>> FoundryPathExt for T {
     }
 }
 
-/// Initializes a tracing Subscriber for logging
-#[allow(dead_code)]
-pub fn subscriber() {
-    tracing_subscriber::Registry::default()
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(ErrorLayer::default())
-        .with(tracing_subscriber::fmt::layer())
-        .init()
-}
-
-pub fn abi_to_solidity(abi: &JsonAbi, name: &str) -> Result<String> {
-    let s = abi.to_sol(name, None);
-    let s = forge_fmt::format(&s)?;
-    Ok(s)
-}
-
-/// Returns a [RetryProvider](foundry_common::alloy::RetryProvider) instantiated using [Config]'s
-/// RPC
-pub fn get_provider(config: &Config) -> Result<foundry_common::provider::alloy::RetryProvider> {
-    get_provider_builder(config)?.build()
-}
-
-/// Returns a [ProviderBuilder](foundry_common::provider::alloy::ProviderBuilder) instantiated using
-/// [Config] values.
-///
-/// Defaults to `http://localhost:8545` and `Mainnet`.
-pub fn get_provider_builder(
-    config: &Config,
-) -> Result<foundry_common::provider::alloy::ProviderBuilder> {
-    let url = config.get_rpc_url_or_localhost_http()?;
-    let mut builder = foundry_common::provider::alloy::ProviderBuilder::new(url.as_ref());
-
-    if let Ok(chain) = config.chain.unwrap_or_default().try_into() {
-        builder = builder.chain(chain);
-    }
-
-    let jwt = config.get_rpc_jwt_secret()?;
-    if let Some(jwt) = jwt {
-        builder = builder.jwt(jwt.as_ref());
-    }
-
-    Ok(builder)
-}
-
-pub async fn get_chain<P, T>(chain: Option<Chain>, provider: P) -> Result<Chain>
-where
-    P: Provider<T, AnyNetwork>,
-    T: Transport + Clone,
-{
-    match chain {
-        Some(chain) => Ok(chain),
-        None => Ok(Chain::from_id(provider.get_chain_id().await?)),
-    }
-}
 
 /// Parses an ether value from a string.
 ///
@@ -160,13 +93,6 @@ pub fn now() -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("time went backwards")
 }
 
-/// Runs the `future` in a new [`tokio::runtime::Runtime`]
-#[allow(unused)]
-pub fn block_on<F: Future>(future: F) -> F::Output {
-    let rt = tokio::runtime::Runtime::new().expect("could not start tokio rt");
-    rt.block_on(future)
-}
-
 /// Conditionally print a message
 ///
 /// This macro accepts a predicate and the message to print if the predicate is tru
@@ -182,30 +108,6 @@ macro_rules! p_println {
             println!($($arg)*)
         }
     }}
-}
-
-/// Loads a dotenv file, from the cwd and the project root, ignoring potential failure.
-///
-/// We could use `warn!` here, but that would imply that the dotenv file can't configure
-/// the logging behavior of Foundry.
-///
-/// Similarly, we could just use `eprintln!`, but colors are off limits otherwise dotenv is implied
-/// to not be able to configure the colors. It would also mess up the JSON output.
-pub fn load_dotenv() {
-    let load = |p: &Path| {
-        dotenvy::from_path(p.join(".env")).ok();
-    };
-
-    // we only want the .env file of the cwd and project root
-    // `find_project_root_path` calls `current_dir` internally so both paths are either both `Ok` or
-    // both `Err`
-    if let (Ok(cwd), Ok(prj_root)) = (std::env::current_dir(), find_project_root_path(None)) {
-        load(&prj_root);
-        if cwd != prj_root {
-            // prj root and cwd can be identical
-            load(&cwd);
-        }
-    };
 }
 
 /// Disables terminal colours if either:
@@ -295,11 +197,6 @@ impl<'a> Git<'a> {
     #[inline]
     pub fn new(root: &'a Path) -> Self {
         Self { root, quiet: false, shallow: false }
-    }
-
-    #[inline]
-    pub fn from_config(config: &'a Config) -> Self {
-        Self::new(config.__root.0.as_path())
     }
 
     pub fn root_of(relative_to: &Path) -> Result<PathBuf> {
@@ -615,30 +512,4 @@ mod tests {
     }
 
     // loads .env from cwd and project dir, See [`find_project_root_path()`]
-    #[test]
-    fn can_load_dotenv() {
-        let temp = tempdir().unwrap();
-        Git::new(temp.path()).init().unwrap();
-        let cwd_env = temp.path().join(".env");
-        fs::create_file(temp.path().join("foundry.toml")).unwrap();
-        let nested = temp.path().join("nested");
-        fs::create_dir(&nested).unwrap();
-
-        let mut cwd_file = File::create(cwd_env).unwrap();
-        let mut prj_file = File::create(nested.join(".env")).unwrap();
-
-        cwd_file.write_all("TESTCWDKEY=cwd_val".as_bytes()).unwrap();
-        cwd_file.sync_all().unwrap();
-
-        prj_file.write_all("TESTPRJKEY=prj_val".as_bytes()).unwrap();
-        prj_file.sync_all().unwrap();
-
-        let cwd = env::current_dir().unwrap();
-        env::set_current_dir(nested).unwrap();
-        load_dotenv();
-        env::set_current_dir(cwd).unwrap();
-
-        assert_eq!(env::var("TESTCWDKEY").unwrap(), "cwd_val");
-        assert_eq!(env::var("TESTPRJKEY").unwrap(), "prj_val");
-    }
 }

@@ -1,16 +1,8 @@
 //! Commonly used contract types and functions.
 
-use alloy_json_abi::{Event, Function, JsonAbi};
-use alloy_primitives::{Address, Bytes, Selector, B256};
-use eyre::Result;
-use foundry_compilers::{
-    artifacts::{CompactContractBytecode, ContractBytecodeSome},
-    ArtifactId,
-};
-use std::{
-    collections::BTreeMap,
-    ops::{Deref, DerefMut},
-};
+use alloy_json_abi::JsonAbi;
+use alloy_primitives::{Address, Bytes};
+use std:: collections::BTreeMap;
 
 /// Container for commonly used contract data.
 #[derive(Debug, Clone)]
@@ -23,75 +15,6 @@ pub struct ContractData {
     pub bytecode: Bytes,
     /// Contract runtime code.
     pub deployed_bytecode: Bytes,
-}
-
-type ArtifactWithContractRef<'a> = (&'a ArtifactId, &'a ContractData);
-
-/// Wrapper type that maps an artifact to a contract ABI and bytecode.
-#[derive(Clone, Default, Debug)]
-pub struct ContractsByArtifact(pub BTreeMap<ArtifactId, ContractData>);
-
-impl ContractsByArtifact {
-    /// Finds a contract which has a similar bytecode as `code`.
-    pub fn find_by_creation_code(&self, code: &[u8]) -> Option<ArtifactWithContractRef> {
-        self.iter()
-            .find(|(_, contract)| bytecode_diff_score(contract.bytecode.as_ref(), code) <= 0.1)
-    }
-
-    /// Finds a contract which has a similar deployed bytecode as `code`.
-    pub fn find_by_deployed_code(&self, code: &[u8]) -> Option<ArtifactWithContractRef> {
-        self.iter().find(|(_, contract)| {
-            bytecode_diff_score(contract.deployed_bytecode.as_ref(), code) <= 0.1
-        })
-    }
-
-    /// Finds a contract which has the same contract name or identifier as `id`. If more than one is
-    /// found, return error.
-    pub fn find_by_name_or_identifier(&self, id: &str) -> Result<Option<ArtifactWithContractRef>> {
-        let contracts = self
-            .iter()
-            .filter(|(artifact, _)| artifact.name == id || artifact.identifier() == id)
-            .collect::<Vec<_>>();
-
-        if contracts.len() > 1 {
-            eyre::bail!("{id} has more than one implementation.");
-        }
-
-        Ok(contracts.first().cloned())
-    }
-
-    /// Flattens the contracts into functions, events and errors.
-    pub fn flatten(&self) -> (BTreeMap<Selector, Function>, BTreeMap<B256, Event>, JsonAbi) {
-        let mut funcs = BTreeMap::new();
-        let mut events = BTreeMap::new();
-        let mut errors_abi = JsonAbi::new();
-        for (_name, contract) in self.iter() {
-            for func in contract.abi.functions() {
-                funcs.insert(func.selector(), func.clone());
-            }
-            for event in contract.abi.events() {
-                events.insert(event.selector(), event.clone());
-            }
-            for error in contract.abi.errors() {
-                errors_abi.errors.entry(error.name.clone()).or_default().push(error.clone());
-            }
-        }
-        (funcs, events, errors_abi)
-    }
-}
-
-impl Deref for ContractsByArtifact {
-    type Target = BTreeMap<ArtifactId, ContractData>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for ContractsByArtifact {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
 }
 
 /// Wrapper type that maps an address to a contract identifier and contract ABI.
@@ -181,18 +104,6 @@ pub fn get_contract_name(id: &str) -> &str {
 /// ```
 pub fn get_file_name(id: &str) -> &str {
     id.split(':').next().unwrap_or(id)
-}
-
-/// Helper function to convert CompactContractBytecode ~> ContractBytecodeSome
-pub fn compact_to_contract(contract: CompactContractBytecode) -> Result<ContractBytecodeSome> {
-    Ok(ContractBytecodeSome {
-        abi: contract.abi.ok_or_else(|| eyre::eyre!("No contract abi"))?,
-        bytecode: contract.bytecode.ok_or_else(|| eyre::eyre!("No contract bytecode"))?.into(),
-        deployed_bytecode: contract
-            .deployed_bytecode
-            .ok_or_else(|| eyre::eyre!("No contract deployed bytecode"))?
-            .into(),
-    })
 }
 
 #[cfg(test)]
